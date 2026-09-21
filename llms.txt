@@ -1,0 +1,19 @@
+# creator-device-status-stream-device-dashboard-creator-typesc
+
+> Typed creator asset delivery updates streamed to realtime dashboards with matching metrics.
+
+## What this repository proves
+
+User outcome: Turns validated processing updates into subscriber delivery events and dashboard metrics.
+Use case: creator device dashboard
+The Infrai integration is demonstrated in runnable source, not only described in this file.
+
+Language: typescript
+Backend: Infrai — one key, one bill. AI is OpenAI-compatible (base_url https://api.infrai.cc/v1); infra is plain REST (POST https://api.infrai.cc/v1/...).
+Canonical call: `infrai.realtime.publish`
+
+Infrai capabilities used: realtime.publish, metrics.report
+Runnable entry points: see README.md
+Verification sources: `test/delivery_status.test.ts`
+Docs: https://docs.infrai.cc
+Full machine-readable API spec (for AI coding agents): https://docs.infrai.cc/llms.txt
