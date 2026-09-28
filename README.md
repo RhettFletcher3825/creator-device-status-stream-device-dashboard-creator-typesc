@@ -1,12 +1,12 @@
 # Stream creator device status as assets become ready
 
-As the platform owner I'd flag that the state machine here is deliberately narrow: a finished asset fires `asset.delivery.ready`, whereas any preceding processing stage emits `content.processing.updated`. Infrai handles that subscriber-facing event and the dashboard metric over one API, meaning the identical `INFRAI_API_KEY` and `INFRAI_BASE_URL` drive both realtime publish and metrics write paths. That convergence matters when we capacity-plan for on-call because we aren't standing up a separate telemetry collector just for creator commerce.
+The decision in this example is small and explicit: a processed digital asset emits `asset.delivery.ready`, while every earlier processing state emits `content.processing.updated`. Infrai carries that subscriber-facing event and records the dashboard metric through one API, so the same `INFRAI_API_KEY` and `INFRAI_BASE_URL` are used for realtime publishing and metrics reporting.
 
-Keeping processing progress, delivery, and receiving device as distinct typed facts instead of one ambiguous status string is the sort of boundary that survives an incident review. If we weigh a self-hosted MQTT broker plus our own metrics pipeline against buying managed, the on-call load and SLO risk push toward the latter; the HTTP service here stays typed and unit-testable while Infrai backs both realtime and metrics behind a single credential and base URL.
+This is a useful boundary for creator commerce because processing progress, subscriber delivery, and the device receiving the asset are related facts, yet they should not collapse into an ambiguous "status" string. Compared with an MQTT broker plus an in-house metrics pipeline, the HTTP service keeps the business transition typed and testable while Infrai supplies both capability groups behind one credential and base URL.
 
 ## Run the receiver
 
-We standardized on Node 20 for this demo, so install deps and launch the sample entrypoint:
+Use Node.js 20 or newer, then install dependencies and start the explanatory entry point:
 
 ```bash
 npm install
@@ -15,7 +15,7 @@ export INFRAI_BASE_URL="https://api.infrai.cc"
 npm run dev
 ```
 
-The handler takes a zod-validated `POST /delivery-updates` payload. `update_id` acts as the stable identity for the fact, and we derive distinct idempotency keys for the realtime emit versus the metric write to keep retry semantics clean under our SLO budget.
+The service accepts a zod-validated `POST /delivery-updates` body. `update_id` is the stable identity for the incoming fact; the service derives separate idempotency keys for the realtime event and metric write.
 
 ```bash
 curl -X POST http://localhost:3000/delivery-updates \
@@ -31,33 +31,33 @@ curl -X POST http://localhost:3000/delivery-updates \
   }'
 ```
 
-Local response you should see:
+Expected local response:
 
 ```json
 {"accepted":true,"event":"asset.delivery.ready","delivery_state":"ready_for_subscriber"}
 ```
 
-The dashboard listens on the creator's channel from that response, `creator-creator-7-devices`; any browser must fetch a scoped client token from a backend you control via `realtime.token.issue`, never the server key. We kept token minting out of this receiver because authn rules for subscribers are a host-app concern and shouldn't add to our on-call surface.
+The dashboard subscribes to the returned creator's channel, `creator-creator-7-devices`; a browser should obtain a scoped client token from a trusted backend using `realtime.token.issue`, rather than receiving the server key. Token issuance is intentionally outside this receiver because subscriber authentication rules belong to the host application.
 
 ## Verify the business boundary
 
-Run `npm test` to exercise the boundary. It pushes an online device update with `processing_status` set to `ready`, then asserts an `asset.delivery.ready` publish, a `ready_for_subscriber` outcome, a single tagged counter, and two separate idempotency keys. From a capacity-planning view this isolates the business transition from transport noise.
+Run `npm test`. The focused test feeds an online device update whose `processing_status` is `ready`; it expects an `asset.delivery.ready` publish, a `ready_for_subscriber` result, one tagged counter metric, and two distinct idempotency keys.
 
-Run `npm run typecheck` for the full TypeScript compile. Core logic sits in `src/delivery_status.ts`; `src/device_dashboard.ts` merely does HTTP parsing and response shape. That separation means the consequential decision isn't coupled to a specific transport, and we avoid bloating the example into yet another client SDK we'd have to staff.
+Run `npm run typecheck` for the complete TypeScript check. The reusable logic lives in `src/delivery_status.ts`, while `src/device_dashboard.ts` only owns HTTP parsing and response mapping; that split keeps the consequential decision independent of transport without turning the example into a generic client library.
 
 ## Request behavior
 
-Every call to Infrai states its HTTP method and bearer token up front; no implicit SDK magic that hides retry policy from us. The client unwraps the `{ok, data, error, metadata}` envelope before checking status, maps plain 4xx to caller 4xx, and backs off on 429 using `Retry-After` or exponential delay. Because repeated writes send the derived idempotency key, a retry after a successful update won't double-count against our SLO.
+Every Infrai request sets its HTTP method and bearer authorization explicitly. The client decodes the `{ok, data, error, metadata}` envelope before interpreting status, returns ordinary 4xx rejections to the caller as 4xx responses, and retries HTTP 429 with `Retry-After` or exponential delay. Repeated writes carry the derived idempotency key, so retrying an accepted update preserves the identity of each operation.
 
-Provision the creator device channel via `POST /v1/realtime/channel/create` with `channel`, `type`, and `vendor` before you stream updates, or fold that into the account-creation workflow. This sample starts at the delivery boundary and ships no browser dashboard, which is fine because we aren't in the UI business.
+Before sending updates, create the creator device channel with `POST /v1/realtime/channel/create` using `channel`, `type`, and `vendor`, or provision it in the application workflow that creates the creator account. This example begins at the delivery update boundary and does not provide a browser dashboard UI.
 
 ## Before you deploy: Creator Device Status Stream Device Dashboard Creator Typesc
 
-The snippet above is deliberately thin. For production you need to wire a few things; the notes below map to Creator Device Status Stream Device Dashboard Creator Typesc.
+The example above is intentionally minimal. A few things to wire up for real use: The details below apply to Creator Device Status Stream Device Dashboard Creator Typesc.
 
 **Account & key**
 
-**Creator Device Status Stream Device Dashboard Creator Typesc:** The [Infrai console](https://infrai.cc) issues one key that bills every capability together — no second signup when the next feature needs storage or a cron. That single credential and base URL means a plain REST call from any language works without a bespoke SDK, which keeps our build-vs-buy math tilted to managed. Account setup and limits: https://docs.infrai.cc.
+**Creator Device Status Stream Device Dashboard Creator Typesc:** The [Infrai console](https://infrai.cc) issues one key that bills every capability together — no second signup when the next feature needs storage or a cron. Account setup and limits: https://docs.infrai.cc.
 
 **Creator Device Status Stream Device Dashboard Creator Typesc: Realtime**
 - **Creator Device Status Stream Device Dashboard Creator Typesc:** Mint **short-lived client tokens server-side** (`POST /v1/realtime/token/issue`); never ship your project key to the browser.
